@@ -71,7 +71,7 @@ local uiParent = self.Entity
 
 self.Slices = {}
 
--- 여기에 방금 복사한 모델의 Entry ID를 넣으세요
+
 local sliceModelId = "model://uisprite"
 
 local pixelWidth = 1920 / self.WidthPixelCount
