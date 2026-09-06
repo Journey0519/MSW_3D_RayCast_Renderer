@@ -1,0 +1,539 @@
+-- RaycastRenderer.lua
+-- MapleStory Worlds Component Script (readable export of RaycastRenderer.xml)
+-- Language: Lua | Component Type: Component
+--
+-- NOTE: MapleStory Worlds components are authored as XML-wrapped Lua code blocks
+-- (see RaycastRenderer.xml, the native importable file). This .lua file is a
+-- flattened, readable version of the same code for browsing on GitHub.
+
+-- ===== Component Properties =====
+-- WidthPixelCount : number = 64
+-- HeightPixelCount : number = 36
+-- Pos : Vector3 = Vector3(0,0,0)
+-- CameraForward : Vector3 = Vector3(0,0,0)
+-- CameraUp : Vector3 = Vector3(0,0,0)
+-- PlaneX : Vector3 = Vector3(0,0,0)
+-- Aspect : number = 0
+-- Map : any = nil
+-- Slices : any = nil
+-- MapSizeX : number = 11
+-- MapSizeY : number = 11
+-- MapSizeZ : number = 11
+-- Yaw : number = 0 --degree
+-- Pitch : number = 0 --degree
+-- MaxDistance : number = 8.0
+-- InteractDistance : number = 5.0
+-- BeforeCursor : Vector2 = Vector2(0,0)
+
+-- ===== function OnBeginPlay() =====
+function OnBeginPlay(self)
+-- 3D 그리드 맵 정의 
+self.Map = {}
+
+local totalSize = self.MapSizeX * self.MapSizeZ * self.MapSizeY
+
+for i = 1, totalSize do
+	if (i < ((self.MapSizeX * self.MapSizeZ) + 1)) then
+		self.Map[i] = 1 --기본 바닥
+		
+		continue
+	end
+	self.Map[i] = 0 -- 일단 다 빈곳 처리
+end
+
+
+ -- 카메라 및 위치 초기화
+self.Pos = Vector3(0.5, -3, 0.5)
+self.CameraForward = Vector3(0, 0, 1) -- 내가 정한 좌표계에서 z축 바라보는 시선
+self.CameraUp = Vector3(0, 1, 0)
+self.PlaneX = Vector3(-1, 0, 0)
+self.Aspect = self.HeightPixelCount / self.WidthPixelCount -- 세로 / 가로
+
+self.Slices = {}
+self:InitSlicePool()
+
+
+--테스트 벽돌추가
+local mapIndexX = self:changePosXToIndex(math.floor(self.Pos.x));
+local mapIndexZ = self:changePosZToIndex(math.floor(self.Pos.z + 3));
+local mapIndexY = self:changePosYToIndex(math.floor(self.Pos.y - 1));
+self.Map[mapIndexX + self.MapSizeX * mapIndexZ + self.MapSizeX * self.MapSizeZ * mapIndexY] = 2
+
+
+_InputService:CursorLockMode(CursorLockMode.Locked)
+end
+
+-- ===== function InitSlicePool() =====
+function InitSlicePool(self)
+local uiParent = self.Entity
+
+self.Slices = {}
+
+-- 여기에 방금 복사한 모델의 Entry ID를 넣으세요
+local sliceModelId = "model://uisprite"
+
+local pixelWidth = 1920 / self.WidthPixelCount
+local pixelHeight = 1080 / self.HeightPixelCount
+
+for i = 0, self.HeightPixelCount - 1 do
+	for j = 0, self.WidthPixelCount - 1 do
+    local slice = _SpawnService:SpawnByModelId(sliceModelId, "Slice_" .. j .."_".. i, Vector3.zero, uiParent)
+    
+    if slice then
+        local transform = slice.UITransformComponent
+		
+        if transform then
+            transform.RectSize = Vector2(pixelWidth, pixelHeight)
+            transform.AnchorsMin = Vector2(0, 0.5)
+            transform.AnchorsMax = Vector2(0, 0.5)
+            transform.Pivot = Vector2(0.5, 0.5)
+            transform.anchoredPosition = Vector2((j) * pixelWidth + (pixelWidth * 0.5) - (1920 * 0.5), (1080 * 0.5) - ((i * pixelHeight) + (pixelHeight * 0.5)))
+				
+			slice.SpriteGUIRendererComponent.Color = Color(j / self.WidthPixelCount, i / self.HeightPixelCount, 0, 1);
+        end
+        self.Slices[i * self.WidthPixelCount + j + 1] = slice
+    end	
+	end 
+end
+end
+
+-- ===== function OnUpdate() =====
+function OnUpdate(self)
+self:HandleInput(delta)
+self:Render()
+end
+
+-- ===== function HandleInput() =====
+function HandleInput(self)
+local moveSpeed = 3.0 * delta
+local rotSpeed = 2.0 * delta
+
+-- 전진/후진 (W / S)
+if _InputService:IsKeyPressed(KeyboardKey.W) then
+	local nextX = self.Pos.x + self.CameraForward.x * moveSpeed
+	local nextZ = self.Pos.z + self.CameraForward.z * moveSpeed
+
+	local mapIndexX = self:changePosXToIndex(math.floor(nextX));
+	local mapIndexZ = self:changePosZToIndex(math.floor(self.Pos.z));
+	local mapIndexY = self:changePosYToIndex(math.floor(self.Pos.y));
+		
+	if self.Map[mapIndexX + mapIndexZ * self.MapSizeX + mapIndexY * self.MapSizeX * self.MapSizeZ] == 0 then 
+		self.Pos.x = nextX
+	end
+	
+	mapIndexZ = self:changePosZToIndex(math.floor(nextZ));
+	if self.Map[mapIndexX + mapIndexZ * self.MapSizeX + mapIndexY * self.MapSizeX * self.MapSizeZ] == 0 then 
+		self.Pos.z = nextZ
+	end
+end
+
+if _InputService:IsKeyPressed(KeyboardKey.S) then
+	local nextX = self.Pos.x - self.CameraForward.x * moveSpeed
+	local nextZ = self.Pos.z - self.CameraForward.z * moveSpeed
+
+	local mapIndexX = self:changePosXToIndex(math.floor(nextX));
+	local mapIndexZ = self:changePosZToIndex(math.floor(self.Pos.z));
+	local mapIndexY = self:changePosYToIndex(math.floor(self.Pos.y));
+		
+	if self.Map[mapIndexX + mapIndexZ * self.MapSizeX + mapIndexY * self.MapSizeX * self.MapSizeZ] == 0 then 
+		self.Pos.x = nextX
+	end
+	
+	mapIndexZ = self:changePosZToIndex(math.floor(nextZ));
+	if self.Map[mapIndexX + mapIndexZ * self.MapSizeX + mapIndexY * self.MapSizeX * self.MapSizeZ] == 0 then 
+		self.Pos.z = nextZ
+	end
+end
+
+
+if _InputService:IsKeyPressed(KeyboardKey.D) then 
+	local nextX = self.Pos.x + self.PlaneX.x * moveSpeed
+	local nextZ = self.Pos.z + self.PlaneX.z * moveSpeed
+
+	local mapIndexX = self:changePosXToIndex(math.floor(nextX));
+	local mapIndexZ = self:changePosZToIndex(math.floor(self.Pos.z));
+	local mapIndexY = self:changePosYToIndex(math.floor(self.Pos.y));
+		
+	if self.Map[mapIndexX + mapIndexZ * self.MapSizeX + mapIndexY * self.MapSizeX * self.MapSizeZ] == 0 then 
+		self.Pos.x = nextX
+	end
+	
+	mapIndexZ = self:changePosZToIndex(math.floor(nextZ));
+	if self.Map[mapIndexX + mapIndexZ * self.MapSizeX + mapIndexY * self.MapSizeX * self.MapSizeZ] == 0 then 
+		self.Pos.z = nextZ
+	end
+end
+
+if _InputService:IsKeyPressed(KeyboardKey.A) then
+	local nextX = self.Pos.x - self.PlaneX.x * moveSpeed
+	local nextZ = self.Pos.z - self.PlaneX.z * moveSpeed
+
+	local mapIndexX = self:changePosXToIndex(math.floor(nextX));
+	local mapIndexZ = self:changePosZToIndex(math.floor(self.Pos.z));
+	local mapIndexY = self:changePosYToIndex(math.floor(self.Pos.y));
+		
+	if self.Map[mapIndexX + mapIndexZ * self.MapSizeX + mapIndexY * self.MapSizeX * self.MapSizeZ] == 0 then 
+		self.Pos.x = nextX
+	end
+	
+	mapIndexZ = self:changePosZToIndex(math.floor(nextZ));
+	if self.Map[mapIndexX + mapIndexZ * self.MapSizeX + mapIndexY * self.MapSizeX * self.MapSizeZ] == 0 then 
+		self.Pos.z = nextZ
+	end
+end
+
+if _InputService:IsKeyPressed(KeyboardKey.Space) then
+	local nextY = self.Pos.y + moveSpeed
+
+	local mapIndexX = self:changePosXToIndex(math.floor(self.Pos.x));
+	local mapIndexZ = self:changePosZToIndex(math.floor(self.Pos.z));
+	local mapIndexY = self:changePosYToIndex(math.floor(nextY));
+		
+	if self.Map[mapIndexX + mapIndexZ * self.MapSizeX + mapIndexY * self.MapSizeX * self.MapSizeZ] == 0 then 
+		self.Pos.y = nextY
+	end
+end
+
+if _InputService:IsKeyPressed(KeyboardKey.LeftShift) then
+	local nextY = self.Pos.y - moveSpeed
+
+	local mapIndexX = self:changePosXToIndex(math.floor(self.Pos.x));
+	local mapIndexZ = self:changePosZToIndex(math.floor(self.Pos.z));
+	local mapIndexY = self:changePosYToIndex(math.floor(nextY));
+		
+	if self.Map[mapIndexX + mapIndexZ * self.MapSizeX + mapIndexY * self.MapSizeX * self.MapSizeZ] == 0 then 
+		self.Pos.y = nextY
+	end
+end
+
+if _InputService:IsKeyPressed(KeyboardKey.Escape) then
+	_InputService:CursorLockMode(CursorLockMode.None)
+end
+end
+
+-- ===== function Render() =====
+function Render(self)
+local COLOR_X = Vector4(1.0, 1.0, 1.0, 1)
+local COLOR_Z = Vector4(0.85, 0.85, 0.85, 1)
+local COLOR_Y = Vector4(0.60, 0.60, 0.60, 1)
+local COLOR_SKY = Vector4(0.40, 0.70, 1.00, 1)
+local COLOR_GROUND = Vector4(0.49, 0.74, 0.32, 1)
+local COLOR_BLACK = Vector4(0, 0, 0, 1)
+
+local targetMapIndex = self:getHitForwardRay(self.CameraForward.x, self.CameraForward.y, self.CameraForward.z)
+
+for pixel_Y = 0, self.HeightPixelCount - 1 do 
+	for pixel_X = 0, self.WidthPixelCount - 1 do
+		--self.Slices[pixel_X + pixel_Y * self.WidthPixelCount + 1].SpriteGUIRendererComponent.Color = COLOR_BLACK
+		
+		local planeWeight_X = (2 / (self.WidthPixelCount - 1) * pixel_X) - 1  
+		local planeWeight_Y = (-2 / (self.HeightPixelCount - 1) * pixel_Y) + 1  
+		planeWeight_Y *= self.Aspect
+		
+		local rayDirX = planeWeight_X * self.PlaneX.x + planeWeight_Y * self.CameraUp.x + self.CameraForward.x
+		local rayDirY = planeWeight_X * self.PlaneX.y + planeWeight_Y * self.CameraUp.y + self.CameraForward.y
+		local rayDirZ = planeWeight_X * self.PlaneX.z + planeWeight_Y * self.CameraUp.z + self.CameraForward.z
+		
+		local invLen = 1.0 / math.sqrt(rayDirX * rayDirX + rayDirY * rayDirY + rayDirZ * rayDirZ)
+		rayDirX *= invLen
+		rayDirY *= invLen
+		rayDirZ *= invLen
+		
+		local deltaX = (rayDirX == 0) and 1e30 or math.abs(1 / rayDirX) --격자선 1칸 움직였다면 ray에 곱하기 delta 얼마나 해야하나
+    	local deltaY = (rayDirY == 0) and 1e30 or math.abs(1 / rayDirY)
+		local deltaZ = (rayDirZ == 0) and 1e30 or math.abs(1 / rayDirZ)
+	
+		local stepX, stepY, stepZ
+		local sideDistX = (rayDirX * self.Pos.x > 0) and (1 - (math.abs(self.Pos.x) % 1)) * deltaX or (math.abs(self.Pos.x) % 1) * deltaX  
+		local sideDistY = (rayDirY * self.Pos.y > 0) and (1 - (math.abs(self.Pos.y) % 1)) * deltaY or (math.abs(self.Pos.y) % 1) * deltaY  
+		local sideDistZ	= (rayDirZ * self.Pos.z > 0) and (1 - (math.abs(self.Pos.z) % 1)) * deltaZ or (math.abs(self.Pos.z) % 1) * deltaZ
+		
+		if (rayDirX > 0) then
+			stepX = 1	
+		else
+			stepX = -1
+		end 
+		
+		if (rayDirY > 0) then
+			stepY = 1	
+		else
+			stepY = -1
+		end 
+		if (rayDirZ > 0) then
+			stepZ = 1
+		else
+			stepZ= -1
+		end
+	
+		local perpWallDist = 0;
+		local hit = 0
+		local side = 0 --0:세로벽에 맞음, 1: 천장 2:가로벽
+		local mapIndexX = self:changePosXToIndex(self.Pos.x)
+		local mapIndexY = self:changePosYToIndex(self.Pos.y)
+		local mapIndexZ = self:changePosZToIndex(self.Pos.z)
+		
+		while hit == 0 do
+			if (sideDistX < sideDistY) then
+				if (sideDistX < sideDistZ) then --x가 젤루 작아
+					mapIndexX += stepX
+					sideDistX += deltaX
+					side = 0
+					
+				else --z가 젤루 작아
+					mapIndexZ += stepZ
+					sideDistZ += deltaZ
+					side = 2
+					
+				end 
+			else
+				if (sideDistY < sideDistZ) then -- y가 젤루 작아
+					mapIndexY += stepY
+					sideDistY += deltaY
+					side = 1
+				
+				else -- z가 젤루 작아
+					mapIndexZ += stepZ
+					sideDistZ += deltaZ
+					side = 2
+					
+				end
+			end
+			
+			--mapindex 유효한지, 시야거리 체크 후 벗어나면 break
+			if (mapIndexX < 0 or mapIndexX > self.MapSizeX - 1 or mapIndexZ < 0 or mapIndexZ > self.MapSizeZ - 1 or mapIndexY < 0 or mapIndexY > self.MapSizeY - 1) then
+				break
+			end
+			
+			if (sideDistX > self.MaxDistance and sideDistY > self.MaxDistance and sideDistZ > self.MaxDistance) then
+			break
+			end --아 이거 축이랑 벡터 거의 동일시 이루는 백터들은 delta가 엄청 커짐 raydir이 거의 0이라서 그래서 or 대신 and로 모두 다 
+
+			hit = self.Map[mapIndexX + (mapIndexZ * self.MapSizeX) + (mapIndexY * self.MapSizeX * self.MapSizeZ) + 1]
+		end
+		
+		local pixel = self.Slices[pixel_X + pixel_Y * self.WidthPixelCount + 1].SpriteGUIRendererComponent
+		local dist = sideDistX < sideDistY and (sideDistX < sideDistZ and sideDistX or sideDistZ) or (sideDistY < sideDistZ and sideDistY or sideDistZ)  
+		local density = 0.15
+		local effectiveDist = math.max(0, dist - 7)
+		local factor = math.exp(-density * effectiveDist)
+		factor = math.clamp(factor, 0.0, 1.0)
+		
+		
+		local forward
+		if (targetMapIndex == nil) then
+			forward = 1
+		else 
+			print("x: "..targetMapIndex.x.. "y: "..targetMapIndex.y.. "z: "..targetMapIndex.z)
+			forward = (mapIndexX == targetMapIndex.x and mapIndexY == targetMapIndex.y and mapIndexZ == targetMapIndex.z) and 0.2 or 1
+		end
+
+		
+		if (hit == 0) then
+			pixel.Color.r = COLOR_SKY.x * factor * forward
+			pixel.Color.g = COLOR_SKY.y * factor * forward
+			pixel.Color.b = COLOR_SKY.z * factor * forward
+			pixel.Color.a = 1
+		elseif (hit == 1) then
+			pixel.Color.r = COLOR_GROUND.x * factor * forward
+			pixel.Color.g = COLOR_GROUND.y * factor * forward
+			pixel.Color.b = COLOR_GROUND.z * factor * forward
+			pixel.Color.a = 1
+		elseif (side == 0) then --세로벽
+			sideDistX -= deltaX --벽충돌 전까지의 거리위해서 하나 다시 뺌
+			perpWallDist = sideDistX
+			pixel.Color.r = COLOR_X.x * factor * forward
+			pixel.Color.g = COLOR_X.y * factor * forward
+			pixel.Color.b = COLOR_X.z * factor * forward
+			pixel.Color.a = 1
+		elseif (side == 1) then --위아래
+			sideDistY -= deltaY
+			perpWallDist = sideDistY
+			pixel.Color.r = COLOR_Y.x * factor * forward
+			pixel.Color.g = COLOR_Y.y * factor * forward
+			pixel.Color.b = COLOR_Y.z * factor * forward
+			pixel.Color.a = 1
+		else --가로벽
+			sideDistZ -= deltaZ
+			perpWallDist = sideDistZ
+			pixel.Color.r = COLOR_Z.x * factor * forward
+			pixel.Color.g = COLOR_Z.y * factor * forward
+			pixel.Color.b = COLOR_Z.z * factor * forward
+			pixel.Color.a = 1
+		end
+				
+
+		
+	 end
+end
+end
+
+-- ===== function changePosXToIndex() =====
+function changePosXToIndex(self)
+local x = math.floor(pos_x)
+local max = math.floor(self.MapSizeX / 2)
+
+x = math.clamp(x, -max, max)
+x += max
+
+return x
+end
+
+-- ===== function changePosYToIndex() =====
+function changePosYToIndex(self)
+local y = math.floor(pos_y)
+local max = math.floor(self.MapSizeY / 2)
+
+y = math.clamp(y, -max, max)
+y += max
+
+return y
+end
+
+-- ===== function changePosZToIndex() =====
+function changePosZToIndex(self)
+local z = math.floor(pos_z)
+local max = math.floor(self.MapSizeZ / 2)
+
+z = math.clamp(z, -max, max)
+z += max
+
+return z
+end
+
+-- ===== function getHitForwardRay() =====
+function getHitForwardRay(self)
+	local deltaX = (rayDirX == 0) and 1e30 or math.abs(1 / rayDirX) --격자선 1칸 움직였다면 ray에 곱하기 delta 얼마나 해야하나
+    local deltaY = (rayDirY == 0) and 1e30 or math.abs(1 / rayDirY)
+	local deltaZ = (rayDirZ == 0) and 1e30 or math.abs(1 / rayDirZ)
+	
+	local stepX, stepY, stepZ
+	local sideDistX = (rayDirX * self.Pos.x > 0) and (1 - (math.abs(self.Pos.x) % 1)) * deltaX or (math.abs(self.Pos.x) % 1) * deltaX  
+	local sideDistY = (rayDirY * self.Pos.y > 0) and (1 - (math.abs(self.Pos.y) % 1)) * deltaY or (math.abs(self.Pos.y) % 1) * deltaY  
+	local sideDistZ	= (rayDirZ * self.Pos.z > 0) and (1 - (math.abs(self.Pos.z) % 1)) * deltaZ or (math.abs(self.Pos.z) % 1) * deltaZ
+		
+	local side --0:오른 세로 1:왼 세로 2:아래 가로 3: 윗 가로 4: 윗  5 아래벽 부딧힘
+	if (rayDirX > 0) then
+		stepX = 1	
+	else
+		stepX = -1
+	end 
+		
+	if (rayDirY > 0) then
+		stepY = 1	
+	else
+		stepY = -1
+	end 
+	if (rayDirZ > 0) then
+		stepZ = 1
+	else
+		stepZ= -1
+	end
+	
+	local perpWallDist = 0;
+	local hit = 0
+
+	local mapIndexX = self:changePosXToIndex(self.Pos.x)
+	local mapIndexY = self:changePosYToIndex(self.Pos.y)
+	local mapIndexZ = self:changePosZToIndex(self.Pos.z)
+		
+	while hit == 0 do
+		if (sideDistX < sideDistY) then
+			if (sideDistX < sideDistZ) then --x가 젤루 작아
+				mapIndexX += stepX
+				sideDistX += deltaX
+				side = stepX < 0 and 0 or 1 
+			else --z가 젤루 작아
+				mapIndexZ += stepZ
+				sideDistZ += deltaZ
+				side = stepZ < 0 and 2 or 3
+			end 
+		else
+			if (sideDistY < sideDistZ) then -- y가 젤루 작아
+				mapIndexY += stepY
+				sideDistY += deltaY
+				side = stepY < 0 and 4 or 5
+			else -- z가 젤루 작아
+				mapIndexZ += stepZ
+				sideDistZ += deltaZ
+				side = stepZ < 0 and 2 or 3	
+			end
+		end
+			
+			--mapindex 유효한지, 시야거리 체크 후 벗어나면 break
+		if (mapIndexX < 0 or mapIndexX > self.MapSizeX - 1 or mapIndexZ < 0 or mapIndexZ > self.MapSizeZ - 1 or mapIndexY < 0 or mapIndexY > self.MapSizeY - 1) then
+			return nil
+		end
+			
+		if (sideDistX > self.InteractDistance and sideDistY > self.InteractDistance and sideDistZ > self.InteractDistance) then
+			return nil
+		end --아 이거 축이랑 벡터 거의 동일시 이루는 백터들은 delta가 엄청 커짐 raydir이 거의 0이라서 그래서 or 대신 and로 모두 다 
+
+		hit = self.Map[mapIndexX + (mapIndexZ * self.MapSizeX) + (mapIndexY * self.MapSizeX * self.MapSizeZ) + 1]
+	end
+
+return Vector4(mapIndexX, mapIndexY, mapIndexZ, side)
+end
+
+-- ===== EventHandler: HandleMouseMoveEvent (on MouseMoveEvent) =====
+function HandleMouseMoveEvent(self, event)
+local delta = event.MouseDelta
+local mouseX = delta.x
+local mouseY = delta.y
+
+self.Yaw = (self.Yaw + mouseX * 1) % 360
+self.Pitch = math.clamp(self.Pitch + mouseY * 1, -89, 89)
+
+--print("Yaw: " ..self.Yaw.. "Pitch: " ..self.Pitch)
+
+local YawRad = math.rad(-self.Yaw)
+local PitchRad = math.rad(self.Pitch)
+
+local cosP = math.cos(PitchRad)
+local sinP = math.sin(PitchRad)
+local cosY = math.cos(YawRad)
+local sinY = math.sin(YawRad)
+
+-- forward
+self.CameraForward.x = cosP * sinY
+self.CameraForward.y = sinP
+self.CameraForward.z = cosP * cosY
+
+-- up 
+self.CameraUp.x = -sinP * sinY
+self.CameraUp.y = cosP
+self.CameraUp.z = -sinP * cosY
+
+-- right 외적해야댐
+self.PlaneX.x = self.CameraForward.y * self.CameraUp.z - self.CameraForward.z * self.CameraUp.y
+self.PlaneX.y = self.CameraForward.z * self.CameraUp.x - self.CameraForward.x * self.CameraUp.z
+self.PlaneX.z = self.CameraForward.x * self.CameraUp.y - self.CameraForward.y * self.CameraUp.x
+end
+
+-- ===== EventHandler: HandleKeyDownEvent (on KeyDownEvent) =====
+function HandleKeyDownEvent(self, event)
+local key = event.key
+
+local hit  = self:getHitForwardRay(self.CameraForward.x, self.CameraForward.y, self.CameraForward.z)
+
+if (hit == nil) then
+	return
+end
+
+local stepX = 0
+local stepZ = 0
+local stepY = 0
+
+if (hit.w < 2) then
+	stepX = hit.w == 0 and 1 or -1 --부딧히는 벽은 레이가 나가는 방향과 같은 벽(normal방향) 아닌 그 반대쪽 벽이 제일 먼저 부딧히니깐 ㅇㅇ
+elseif (hit.w < 4) then
+	stepZ = hit.w == 2 and 1 or -1
+else 
+	stepY = hit.w == 4 and 1 or -1
+end
+
+if (key == KeyboardKey.Mouse0) then
+	self.Map[(hit.x + stepX)  + (hit.z + stepZ) * self.MapSizeX + (hit.y + stepY) * self.MapSizeX * self.MapSizeZ + 1] = 2
+elseif (key == KeyboardKey.Mouse1) then
+	self.Map[(hit.x) + (hit.z) * self.MapSizeX + (hit.y) * self.MapSizeX * self.MapSizeZ + 1] = 0
+end
+end
